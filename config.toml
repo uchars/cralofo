@@ -1,0 +1,16 @@
+[settings]
+server = "http://injector:5050/api/v1/push"
+log_level = "trace"
+
+[[files]]
+path = "logs/"
+file = "InterfaceAdapter*.log"
+labels.app_name = "Interface Adapter"
+labels.component = "Nils"
+forward_frequency_ms= 2000
+
+[[files]]
+path = "logs/other/"
+file = "*"
+labels.app_name = "Test"
+forward_frequency_ms = 5000
