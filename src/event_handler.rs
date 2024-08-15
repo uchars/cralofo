@@ -95,21 +95,22 @@ impl EventHandler {
     /// This helper method will handle the remove file event.
     /// It makes sure the positions file is updated.
     ///
-    /// # Errors
+    /// # Arguments
     ///
-    /// This function will return an error if .
+    /// * `event` - file remove event.
     fn handle_remove_file(&self, event: &notify::Event) -> Result<(), &'static str> {
         // if folder removed, also remove all files inside folder.
         debug!("removed {:?}", event.paths);
         Ok(())
     }
 
+    /// This function will return an error if .
     /// This helper method handles the file access event.
     /// It mostly just filters out the irrelevant events which are not relevant for crab_crib's featureset.
     ///
-    /// # Errors
+    /// # Arguments
     ///
-    /// This function will return an error if .
+    /// * `event` - file access event.
     fn handle_file_access(&self, event: &notify::Event) -> Result<(), &'static str> {
         // only handling file write event.
         match event.kind {
@@ -126,11 +127,14 @@ impl EventHandler {
     ///
     /// After reading the new data that was added to the file it will publish the logs to the API.
     ///
+    /// # Arguments
+    ///
+    /// * `event` - file system event.
+    ///
     /// # Errors
     ///
-    /// This function will return an error if
-    /// - The event does not contain valid path info.
-    /// - File cannot ben read.
+    /// - write event did not have a path.
+    ///
     fn handle_file_write(&self, event: &notify::Event) -> Result<(), &'static str> {
         if event.paths.is_empty() {
             return Err("file write event received without file info.");

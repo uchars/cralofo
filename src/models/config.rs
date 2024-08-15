@@ -13,6 +13,7 @@ pub struct FileConfigs(pub Vec<FileConfig>);
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct FileConfig {
+    pub positions_file: String,
     pub path: String,
     pub labels: HashMap<String, String>,
     pub file: String,
@@ -25,8 +26,6 @@ pub struct FileConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
     pub server: String,
-    #[serde(default = "default_positions_path")]
-    pub positions_path: String,
     #[serde(default = "default_loglevel")]
     pub log_level: String,
 }
@@ -57,20 +56,12 @@ impl fmt::Display for FileConfigs {
 
 impl fmt::Display for Settings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Settings:\n  adress: {}\n  positions path: {}",
-            self.server, self.positions_path
-        )
+        write!(f, "Settings:\n  adress: {}", self.server,)
     }
 }
 
 fn default_loglevel() -> String {
     "warn".to_string()
-}
-
-fn default_positions_path() -> String {
-    "/tmp/positions/".to_string()
 }
 
 fn default_buffersize() -> u32 {
