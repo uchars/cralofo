@@ -3,12 +3,17 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use log::{error, info, trace, warn};
-use models::config::{Config, FileConfig, Settings};
+use log::{debug, error, info, trace, warn};
+use models::{
+    config::{Config, FileConfig, Settings},
+    positions::{Position, PositionsFile},
+};
+use utils::file_exists;
 
 pub mod api;
 pub mod event_handler;
 pub mod models;
+pub mod positions_manager;
 pub mod utils;
 
 pub fn main() {
@@ -33,7 +38,24 @@ fn start_thread(settings: Settings, file_conf: FileConfig) -> JoinHandle<()> {
     info!("starting thread for path '{}'...", file_conf.path);
     thread::spawn(move || {
         info!("thread for '{}' started", file_conf.path);
-        let handler = event_handler::EventHandler { settings };
+        // get positions information for path, if exists or create new positions file.
+        let mut positions_file =
+            parse_positions_file(&file_conf.positions_file).unwrap_or_default();
+        // add position just for fun.
+        positions_file.add_position(&Position {
+            file_path: "foo".to_string(),
+            file_id: "bar".to_string(),
+            line: 128,
+        });
+        // write the created TOML struct to the disk
+        match positions_file.write(&file_conf.positions_file) {
+            Ok(_) => debug!("file updated '{}'", file_conf.positions_file),
+            Err(e) => warn!("create file failed. reason: {}", e),
+        };
+        let handler = event_handler::EventHandler {
+            settings,
+            positions: positions_file,
+        };
         if let Err(error) = handler.watch(file_conf.path.clone()) {
             error!(
                 "({}) Error: {:?} {:?}",
@@ -55,4 +77,23 @@ fn join_threads(handles: Vec<JoinHandle<()>>) {
         }
         i += 1;
     }
+}
+
+fn parse_positions_file(path: &str) -> Result<PositionsFile, ()> {
+    let positions_file: PositionsFile;
+    if !file_exists(path) {
+        debug!("creating positions struct '{}'", path);
+        positions_file = PositionsFile::new();
+    } else {
+        debug!("using existing positions file '{}'", path);
+        let file_str = match fs::read_to_string(path) {
+            Ok(data) => data,
+            Err(_) => return Err(()),
+        };
+        positions_file = match toml::de::from_str(&file_str) {
+            Ok(d) => d,
+            Err(_) => return Err(()),
+        };
+    }
+    Ok(positions_file)
 }

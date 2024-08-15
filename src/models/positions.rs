@@ -1,16 +1,14 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Serialize, Debug, Deserialize, Clone, Default)]
 pub struct PositionsFile {
-    pub created_unix_millis: u64,
-    pub modified_unix_millis: u64,
-    pub position: Positions,
+    pub created_datetime_str: String,
+    pub modified_datetime_str: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub position: Vec<Position>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct Positions(pub Vec<Position>);
-
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Serialize, Debug, Deserialize, Clone)]
 pub struct Position {
     /// full system path to the file
     pub file_path: String,
@@ -18,5 +16,5 @@ pub struct Position {
     /// Will be Inode on linux and File ID on Windows.
     pub file_id: String,
     /// Last line that has been read.
-    pub line: u128,
+    pub line: u64,
 }

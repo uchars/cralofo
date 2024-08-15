@@ -4,6 +4,7 @@ log_level = "trace"
 
 [[files]]
 path = "logs/"
+positions_file = "./scratch/logs_positions.toml"
 file = "InterfaceAdapter*.log"
 labels.app_name = "Interface Adapter"
 labels.component = "Nils"
@@ -11,6 +12,7 @@ forward_frequency_ms= 2000
 
 [[files]]
 path = "logs/other/"
+positions_file = "./scratch/other_positions.toml"
 file = "*"
 labels.app_name = "Test"
 forward_frequency_ms = 5000

@@ -5,16 +5,20 @@ use notify::{RecommendedWatcher, Watcher};
 
 use crate::{
     api::publish_logs,
-    models::{config::Settings, logs::Logs},
+    models::{config::Settings, logs::Logs, positions::PositionsFile},
 };
 
 pub struct EventHandler {
     pub settings: Settings,
+    pub positions: PositionsFile,
 }
 
 impl EventHandler {
-    pub fn new(settings: Settings) -> Self {
-        Self { settings }
+    pub fn new(settings: Settings, positions: PositionsFile) -> Self {
+        Self {
+            settings,
+            positions,
+        }
     }
 
     /// Watch events for a given file.
