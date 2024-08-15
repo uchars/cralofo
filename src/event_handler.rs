@@ -5,7 +5,12 @@ use notify::{RecommendedWatcher, Watcher};
 
 use crate::{
     api::publish_logs,
-    models::{config::Settings, logs::Logs, positions::PositionsFile},
+    models::{
+        config::Settings,
+        logs::Logs,
+        positions::{Position, PositionsFile},
+    },
+    utils::get_file_inode,
 };
 
 pub struct EventHandler {
@@ -27,7 +32,7 @@ impl EventHandler {
     /// # Errors
     ///
     /// This function will return an error if .
-    pub fn watch<P: AsRef<Path>>(&self, path: P) -> notify::Result<()> {
+    pub fn watch<P: AsRef<Path>>(&mut self, path: P) -> notify::Result<()> {
         trace!("watch");
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
@@ -36,7 +41,9 @@ impl EventHandler {
         for res in rx {
             match res {
                 Ok(event) => {
-                    let _ = self.handle_file_event(&event);
+                    if let Err(err) = self.handle_file_event(&event) {
+                        error!("{}", err);
+                    }
                 }
                 Err(error) => error!("Error: {error:?}"),
             }
@@ -50,7 +57,7 @@ impl EventHandler {
     /// # Errors
     ///
     /// This function will return an error if .
-    fn handle_file_event(&self, event: &notify::Event) -> Result<(), &'static str> {
+    fn handle_file_event(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         trace!("Change: {event:?}");
         match event.kind {
             notify::EventKind::Access(_) => self.handle_file_access(&event)?,
@@ -70,11 +77,23 @@ impl EventHandler {
     /// # Errors
     ///
     /// This function will return an error if .
-    fn handle_create_file(&self, event: &notify::Event) -> Result<(), &'static str> {
+    fn handle_create_file(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         if event.paths.is_empty() {
             return Err("create file event did not contain file.");
         }
-        debug!("created file {:?}", event.paths[0].as_os_str());
+        let path = match event.paths[0].as_os_str().to_str() {
+            Some(path) => path,
+            None => return Err("could not convert path to string"),
+        };
+        let inode = match get_file_inode(path) {
+            Ok(inode) => inode,
+            Err(_) => return Err("could not get inode file"),
+        };
+        let position = Position::new(path.to_string(), inode, 0, 0);
+        self.positions.add_position(&position);
+        if let Err(err) = self.positions.write() {
+            error!("Write failed: {}", err);
+        }
         Ok(())
     }
 
@@ -89,10 +108,23 @@ impl EventHandler {
     /// # Errors
     ///
     /// This function will return an error if .
-    fn handle_rename_file(&self, event: &notify::Event) -> Result<(), &'static str> {
-        let from = event.paths[0].as_os_str();
-        let to = event.paths[1].as_os_str();
-        debug!("file renamed {:?} -> {:?}", from, to);
+    fn handle_rename_file(&mut self, event: &notify::Event) -> Result<(), &'static str> {
+        if event.paths.len() < 2 {
+            return Err("rename event contained less than 2 elements for some reason.");
+        }
+        let to = match event.paths[1].as_os_str().to_str() {
+            Some(path) => path,
+            None => return Err("could not convert path to string"),
+        };
+        // get inode for old and new file
+        let inode = match get_file_inode(to) {
+            Ok(inode) => inode,
+            Err(_) => return Err("could not get inode file"),
+        };
+        self.positions.rename_position(inode, to);
+        if let Err(e) = self.positions.write() {
+            error!("failed to write: {}", e);
+        }
         Ok(())
     }
 
@@ -102,9 +134,23 @@ impl EventHandler {
     /// # Arguments
     ///
     /// * `event` - file remove event.
-    fn handle_remove_file(&self, event: &notify::Event) -> Result<(), &'static str> {
+    fn handle_remove_file(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         // if folder removed, also remove all files inside folder.
         debug!("removed {:?}", event.paths);
+        if event.paths.is_empty() {
+            return Err("create file event did not contain file.");
+        }
+        let path = match event.paths[0].as_os_str().to_str() {
+            Some(path) => path,
+            None => return Err("could not convert path to string"),
+        };
+        // need to remove based on file name, since file no longer exists.
+        self.positions
+            .remove_position(|other| other.file_path == path);
+        if let Err(e) = self.positions.write() {
+            error!("failed to write: {}", e);
+        }
+
         Ok(())
     }
 

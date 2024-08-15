@@ -1,4 +1,6 @@
 use std::{
+    fs,
+    os::unix::fs::MetadataExt,
     path::Path,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -31,4 +33,11 @@ pub fn get_datetime_str() -> String {
 
 pub fn file_exists(file_name: &str) -> bool {
     Path::new(file_name).exists()
+}
+
+pub fn get_file_inode(path: &str) -> Result<u64, ()> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.ino()),
+        Err(_) => Err(()),
+    }
 }

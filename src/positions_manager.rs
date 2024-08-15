@@ -8,10 +8,11 @@ use crate::{
 };
 
 impl PositionsFile {
-    pub fn new() -> Self {
-        debug!("creating positions file");
+    pub fn new(path: &str) -> Self {
+        debug!("creating positions file for path '{}'", path);
         let created = get_datetime_str();
         PositionsFile {
+            path: path.to_string(),
             created_datetime_str: created.clone(),
             modified_datetime_str: created.clone(),
             position: Vec::new(),
@@ -58,20 +59,20 @@ impl PositionsFile {
         }
     }
 
-    /// Update a specific table in the array based on the unique file id.
+    /// Update the file name of position based on it's id.
     ///
     /// # Arguments
     ///
     /// * `id` - Unique file id of the element
-    /// * `new` - Struct containing the updated values.
-    pub fn update_position(&mut self, id: String, new: &Position) {
+    /// * `new_path` - New path of the file.
+    pub fn rename_position(&mut self, id: u64, new_path: &str) {
         match self.position.iter().position(|other| other.file_id == id) {
             Some(index) => {
                 debug!(
                     "update file path '{}' -> '{}'",
-                    self.position[index].file_path, new.file_path
+                    self.position[index].file_path, new_path
                 );
-                self.position[index].file_path = new.file_path.clone();
+                self.position[index].file_path = new_path.to_string();
                 self.update();
             }
             None => {
@@ -104,14 +105,18 @@ impl PositionsFile {
     /// [[position]]
     /// file_id = 42
     /// ```
-    pub fn remove_position(&mut self, id: String) {
-        match self.position.iter().position(|other| other.file_id == id) {
+    pub fn remove_position<F>(&mut self, predicate: F)
+    where
+        F: Fn(&Position) -> bool,
+    {
+        match self.position.iter().position(predicate) {
             Some(index) => {
+                debug!("remove position");
                 self.position.remove(index);
                 self.update();
             }
             None => {
-                debug!("could not find position with id '{}'", id);
+                debug!("could not find position based on predicate");
             }
         };
     }
@@ -126,13 +131,18 @@ impl PositionsFile {
     /// # Arguments
     ///
     /// * `path` - Path (including filename) where the .toml will be created.
-    pub fn write(&self, path: &str) -> Result<(), String> {
-        debug!("write TOML to '{}'", path);
+    pub fn write(&self) -> Result<(), String> {
+        debug!("write TOML to '{}'", self.path);
         let toml = toml::to_string(&self.clone())
             .map_err(|e| std::format!("could not serialize struct ({})", e.to_string()))?;
-        let mut file = File::create(path)
+        let mut file = File::create(&self.path)
             .map_err(|e| std::format!("could not create file ({})", e.to_string()))?;
         file.write_all(toml.as_bytes())
             .map_err(|e| std::format!("could not write to file ({})", e.to_string()))
+    }
+
+    pub fn set_path(&mut self, path: &str) {
+        debug!("set path {}", path);
+        self.path = path.to_string();
     }
 }
