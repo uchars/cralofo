@@ -201,9 +201,15 @@ impl EventHandler {
                 .map(|pos| read_lines_starting_from_byte(&pos.file_path, pos.bytes_read, 1000000))
                 .ok_or("could not read lines")?
                 .ok_or("foo")?;
-            self.positions.update_bytes_read(inode, file_read.new_pos);
-            publish_logs(&self.settings.server, Logs::from_lines(file_read.lines)).await;
-            let _ = self.positions.write();
+
+            if let Err(e) =
+                publish_logs(&self.settings.server, Logs::from_lines(file_read.lines)).await
+            {
+                error!("{}", e);
+            } else {
+                self.positions.update_bytes_read(inode, file_read.new_pos);
+                let _ = self.positions.write();
+            }
             return Ok(());
         }
         Err("could not get inode for file")
