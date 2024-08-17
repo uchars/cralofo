@@ -33,7 +33,7 @@ impl EventHandler {
     /// # Errors
     ///
     /// This function will return an error if .
-    pub fn watch<P: AsRef<Path>>(&mut self, path: P) -> notify::Result<()> {
+    pub async fn watch<P: AsRef<Path>>(&mut self, path: P) -> notify::Result<()> {
         trace!("watch");
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
@@ -43,7 +43,7 @@ impl EventHandler {
             match res {
                 Ok(event) => {
                     // TODO: only handle file events if filename matches regex
-                    if let Err(err) = self.handle_file_event(&event) {
+                    if let Err(err) = self.handle_file_event(&event).await {
                         error!("{}", err);
                     }
                 }
@@ -59,10 +59,10 @@ impl EventHandler {
     /// # Errors
     ///
     /// This function will return an error if .
-    fn handle_file_event(&mut self, event: &notify::Event) -> Result<(), &'static str> {
+    async fn handle_file_event(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         trace!("Change: {event:?}");
         match event.kind {
-            notify::EventKind::Access(_) => self.handle_file_access(&event)?,
+            notify::EventKind::Access(_) => self.handle_file_access(&event).await?,
             notify::EventKind::Create(notify::event::CreateKind::File) => {
                 self.handle_create_file(&event)?
             }
@@ -166,13 +166,14 @@ impl EventHandler {
     /// # Arguments
     ///
     /// * `event` - file access event.
-    fn handle_file_access(&mut self, event: &notify::Event) -> Result<(), &'static str> {
+    async fn handle_file_access(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         // only handling file write event.
-        match event.kind {
-            notify::EventKind::Access(notify::event::AccessKind::Close(
+        if event.kind
+            == notify::EventKind::Access(notify::event::AccessKind::Close(
                 notify::event::AccessMode::Write,
-            )) => self.handle_file_write(event)?,
-            _ => {}
+            ))
+        {
+            return self.handle_file_write(event).await;
         }
         Ok(())
     }
@@ -190,21 +191,19 @@ impl EventHandler {
     ///
     /// - write event did not have a path.
     ///
-    fn handle_file_write(&mut self, event: &notify::Event) -> Result<(), &'static str> {
+    async fn handle_file_write(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         if event.paths.is_empty() {
             return Err("file write event received without file info.");
         }
         if let Some((inode, _)) = self.get_inode_for_os_str(&event.paths[0]) {
-            self.positions
-                .find(|&pos| pos.file_id == inode)
+            let foo = self.positions.find(|&pos| pos.file_id == inode);
+            let file_read = foo
                 .map(|pos| read_lines_starting_from_byte(&pos.file_path, pos.bytes_read, 1000000))
-                .map(|x| {
-                    x.map(|y| {
-                        self.positions.update_bytes_read(inode, y.new_pos);
-                        publish_logs(&self.settings.server, Logs::new(y.lines));
-                        self.positions.write()
-                    })
-                });
+                .ok_or("could not read lines")?
+                .ok_or("foo")?;
+            self.positions.update_bytes_read(inode, file_read.new_pos);
+            publish_logs(&self.settings.server, Logs::from_lines(file_read.lines)).await;
+            let _ = self.positions.write();
             return Ok(());
         }
         Err("could not get inode for file")

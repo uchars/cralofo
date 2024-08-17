@@ -82,7 +82,7 @@ impl PositionsFile {
             .iter()
             .position(|other| other.file_id == id)
             .map(|idx| {
-                log::info!(
+                log::trace!(
                     "updating byte pos {} -> {}",
                     self.position[idx].bytes_read,
                     new_byte_pos
@@ -104,9 +104,11 @@ impl PositionsFile {
             .iter()
             .position(|other| other.file_id == id)
             .map(|idx| {
-                debug!(
+                trace!(
                     "({}) update file path '{}' -> '{}'",
-                    id, self.position[idx].file_path, new_path
+                    id,
+                    self.position[idx].file_path,
+                    new_path
                 );
                 self.position[idx].file_path = new_path.to_string();
                 self.update();

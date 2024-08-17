@@ -8,6 +8,7 @@ use models::{
     config::{Config, FileConfig, Settings},
     positions::PositionsFile,
 };
+use tokio::runtime::Runtime;
 use utils::file_exists;
 
 pub mod api;
@@ -28,7 +29,6 @@ pub fn main() {
 
     config
         .files
-        .0
         .iter()
         .for_each(|file| handles.push(start_thread(config.settings.clone(), file.clone())));
 
@@ -38,6 +38,7 @@ pub fn main() {
 fn start_thread(settings: Settings, file_conf: FileConfig) -> JoinHandle<()> {
     info!("starting thread for path '{}'...", file_conf.path);
     thread::spawn(move || {
+        let rt = Runtime::new().unwrap();
         info!("thread for '{}' started", file_conf.path);
         // get positions information for path, if exists or create new positions file.
         let mut positions_file = parse_positions_file(&file_conf.positions_file)
@@ -50,19 +51,23 @@ fn start_thread(settings: Settings, file_conf: FileConfig) -> JoinHandle<()> {
             Ok(_) => debug!("file updated '{}'", file_conf.positions_file),
             Err(e) => warn!("create file failed. reason: {}", e),
         };
-        let mut handler = event_handler::EventHandler {
-            settings,
-            positions: positions_file,
-        };
-        if let Err(error) = handler.watch(file_conf.path.clone()) {
-            error!(
-                "({}) Error: {:?} {:?}",
-                file_conf.path.clone(),
-                error.kind,
-                error.paths
-            );
-        }
+        rt.block_on(start_watcher(settings, positions_file, file_conf));
     })
+}
+
+async fn start_watcher(settings: Settings, positions_file: PositionsFile, file_conf: FileConfig) {
+    let mut handler = event_handler::EventHandler {
+        settings,
+        positions: positions_file,
+    };
+    if let Err(error) = handler.watch(file_conf.path.clone()).await {
+        error!(
+            "({}) Error: {:?} {:?}",
+            file_conf.path.clone(),
+            error.kind,
+            error.paths
+        );
+    };
 }
 
 fn join_threads(handles: Vec<JoinHandle<()>>) {

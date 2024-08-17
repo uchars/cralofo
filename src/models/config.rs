@@ -5,11 +5,8 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub settings: Settings,
-    pub files: FileConfigs,
+    pub files: Vec<FileConfig>,
 }
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct FileConfigs(pub Vec<FileConfig>);
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct FileConfig {
@@ -34,24 +31,25 @@ pub struct Settings {
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "\n{}\n{}", self.settings, self.files)
+        write!(f, "\n{}", self.settings)?;
+        self.files
+            .iter()
+            .try_for_each(|file| write!(f, "\n{}", file))?;
+        Ok(())
     }
 }
 
-impl fmt::Display for FileConfigs {
+impl fmt::Display for FileConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Files\n")?;
-        for (pos, file) in self.0.iter().enumerate() {
-            write!(
+        write!(
                 f,
-                "  File #{}\n    Path: {}\n    File Regex: {}\n    Forward Frequency: {}ms\n    Buffer Size (Byte): {}\n",
-                pos,
-                file.path,
-                file.file_regex,
-                file.forward_frequency_ms,
-                file.buffer_size
+                "Path: {}\n    File Regex: {}\n    Forward Frequency: {}ms\n    Buffer Size (Byte): {}\n",
+                self.path,
+                self.file_regex,
+                self.forward_frequency_ms,
+                self.buffer_size
             )?;
-        }
         Ok(())
     }
 }
