@@ -1,6 +1,11 @@
-use std::{fs::File, io::Write};
+use std::{
+    fs::{self, File},
+    io::Write,
+    os::unix::fs::MetadataExt,
+    path::Path,
+};
 
-use log::{debug, info};
+use log::{debug, info, trace};
 
 use crate::{
     models::positions::{Position, PositionsFile},
@@ -13,10 +18,16 @@ impl PositionsFile {
         let created = get_datetime_str();
         PositionsFile {
             path: path.to_string(),
-            created_datetime_str: created.clone(),
-            modified_datetime_str: created.clone(),
+            created_datetime: created.clone(),
+            modified_datetime: created.clone(),
             position: Vec::new(),
         }
+    }
+
+    pub fn init(&mut self, log_dir: &str) {
+        self.filename_update(log_dir);
+        self.find_and_add();
+        self.cleanup();
     }
 
     /// Add a new table element to the table vector.
@@ -59,6 +70,28 @@ impl PositionsFile {
         }
     }
 
+    pub fn find<F>(&self, predicate: F) -> Option<&Position>
+    where
+        F: Fn(&&Position) -> bool,
+    {
+        self.position.iter().find(predicate)
+    }
+
+    pub fn update_bytes_read(&mut self, id: u64, new_byte_pos: u64) {
+        self.position
+            .iter()
+            .position(|other| other.file_id == id)
+            .map(|idx| {
+                log::info!(
+                    "updating byte pos {} -> {}",
+                    self.position[idx].bytes_read,
+                    new_byte_pos
+                );
+                self.position[idx].bytes_read = new_byte_pos;
+                self.update()
+            });
+    }
+
     /// Update the file name of position based on it's id.
     ///
     /// # Arguments
@@ -66,19 +99,18 @@ impl PositionsFile {
     /// * `id` - Unique file id of the element
     /// * `new_path` - New path of the file.
     pub fn rename_position(&mut self, id: u64, new_path: &str) {
-        match self.position.iter().position(|other| other.file_id == id) {
-            Some(index) => {
+        trace!("attempting to rename file({}) -> {}", id, new_path);
+        self.position
+            .iter()
+            .position(|other| other.file_id == id)
+            .map(|idx| {
                 debug!(
-                    "update file path '{}' -> '{}'",
-                    self.position[index].file_path, new_path
+                    "({}) update file path '{}' -> '{}'",
+                    id, self.position[idx].file_path, new_path
                 );
-                self.position[index].file_path = new_path.to_string();
+                self.position[idx].file_path = new_path.to_string();
                 self.update();
-            }
-            None => {
-                debug!("could not find position with id '{}'", id);
-            }
-        };
+            });
     }
 
     /// Remove a table from the TOML struct.
@@ -109,21 +141,16 @@ impl PositionsFile {
     where
         F: Fn(&Position) -> bool,
     {
-        match self.position.iter().position(predicate) {
-            Some(index) => {
-                debug!("remove position");
-                self.position.remove(index);
-                self.update();
-            }
-            None => {
-                debug!("could not find position based on predicate");
-            }
-        };
+        self.position.iter().position(predicate).map(|idx| {
+            debug!("remove position");
+            self.position.remove(idx);
+            self.update();
+        });
     }
 
     /// Internal helper method to update some member fields.
     fn update(&mut self) {
-        self.modified_datetime_str = get_datetime_str();
+        self.modified_datetime = get_datetime_str();
     }
 
     /// Write the TOML struct in its current state to a specified path.
@@ -145,4 +172,35 @@ impl PositionsFile {
         debug!("set path {}", path);
         self.path = path.to_string();
     }
+
+    /// Remove all positions which no longer exist.
+    fn cleanup(&mut self) {
+        self.position
+            .retain(|p| Path::exists(Path::new(&p.file_path)));
+    }
+
+    /// Check if inode still matches filename, if not update.
+    fn filename_update(&mut self, log_dir: &str) {
+        if let Ok(dir_files) = fs::read_dir(log_dir) {
+            // get files and their inode and update filename
+            dir_files
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let path = e.path();
+                    let inode = e.metadata().ok()?.ino();
+                    path.to_str().map(|s| (s.to_string(), inode))
+                })
+                .collect::<Vec<(String, u64)>>()
+                .iter()
+                .for_each(|(fname, inode)| {
+                    debug!("checking file ({}, {})", fname, inode);
+                    self.rename_position(*inode, fname);
+                });
+        } else {
+            log::warn!("could not get files in dir '{}'", log_dir);
+        }
+    }
+
+    /// Search directory for files which match regex and add them.
+    fn find_and_add(&mut self) {}
 }

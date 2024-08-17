@@ -12,6 +12,7 @@ use utils::file_exists;
 
 pub mod api;
 pub mod event_handler;
+pub mod file_reader;
 pub mod models;
 pub mod positions_manager;
 pub mod utils;
@@ -25,11 +26,11 @@ pub fn main() {
 
     info!("Using the following configuration {}", config);
 
-    for i in 0..config.files.0.len() {
-        let file = config.files.0[i].clone();
-        let settings = config.settings.clone();
-        handles.push(start_thread(settings, file));
-    }
+    config
+        .files
+        .0
+        .iter()
+        .for_each(|file| handles.push(start_thread(config.settings.clone(), file.clone())));
 
     join_threads(handles)
 }
@@ -39,13 +40,10 @@ fn start_thread(settings: Settings, file_conf: FileConfig) -> JoinHandle<()> {
     thread::spawn(move || {
         info!("thread for '{}' started", file_conf.path);
         // get positions information for path, if exists or create new positions file.
-        let mut positions_file = match parse_positions_file(&file_conf.positions_file) {
-            Ok(p) => p,
-            Err(e) => {
-                error!("{}", e);
-                PositionsFile::default()
-            }
-        };
+        let mut positions_file = parse_positions_file(&file_conf.positions_file)
+            .unwrap_or(PositionsFile::new(&file_conf.positions_file));
+        // remove nonexistant files from TOML struct
+        positions_file.init(&file_conf.path);
         // write the created TOML struct to the disk
         positions_file.set_path(&file_conf.positions_file);
         match positions_file.write() {
@@ -83,7 +81,7 @@ fn parse_positions_file(path: &str) -> Result<PositionsFile, String> {
     let positions_file: PositionsFile;
     if !file_exists(path) {
         debug!("creating positions struct '{}'", path);
-        positions_file = PositionsFile::new(path);
+        return Err("foo".to_string());
     } else {
         debug!("using existing positions file '{}'", path);
         let file_str = match fs::read_to_string(path) {

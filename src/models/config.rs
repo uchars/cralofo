@@ -16,7 +16,7 @@ pub struct FileConfig {
     pub positions_file: String,
     pub path: String,
     pub labels: HashMap<String, String>,
-    pub file: String,
+    pub file_regex: String,
     #[serde(default = "default_forward_frequency_ms")]
     pub forward_frequency_ms: u32,
     #[serde(default = "default_buffersize")]
@@ -28,6 +28,8 @@ pub struct Settings {
     pub server: String,
     #[serde(default = "default_loglevel")]
     pub log_level: String,
+    #[serde(default = "default_scan_existing")]
+    pub scan_existing: bool,
 }
 
 impl fmt::Display for Config {
@@ -42,10 +44,10 @@ impl fmt::Display for FileConfigs {
         for (pos, file) in self.0.iter().enumerate() {
             write!(
                 f,
-                "  File #{}\n    Path: {}\n    File: {}\n    Forward Frequency: {}ms\n    Buffer Size (Byte): {}\n",
+                "  File #{}\n    Path: {}\n    File Regex: {}\n    Forward Frequency: {}ms\n    Buffer Size (Byte): {}\n",
                 pos,
                 file.path,
-                file.file,
+                file.file_regex,
                 file.forward_frequency_ms,
                 file.buffer_size
             )?;
@@ -70,4 +72,8 @@ fn default_buffersize() -> u32 {
 
 fn default_forward_frequency_ms() -> u32 {
     5000
+}
+
+fn default_scan_existing() -> bool {
+    false
 }

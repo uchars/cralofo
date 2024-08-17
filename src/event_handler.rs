@@ -1,10 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use log::{debug, error, trace};
 use notify::{RecommendedWatcher, Watcher};
 
 use crate::{
     api::publish_logs,
+    file_reader::read_lines_starting_from_byte,
     models::{
         config::Settings,
         logs::Logs,
@@ -41,6 +42,7 @@ impl EventHandler {
         for res in rx {
             match res {
                 Ok(event) => {
+                    // TODO: only handle file events if filename matches regex
                     if let Err(err) = self.handle_file_event(&event) {
                         error!("{}", err);
                     }
@@ -89,7 +91,10 @@ impl EventHandler {
             Ok(inode) => inode,
             Err(_) => return Err("could not get inode file"),
         };
-        let position = Position::new(path.to_string(), inode, 0, 0);
+        // TODO: i need to detect if this was a swap, if so i need to update
+        // the byte position of this one
+        log::info!("poggers");
+        let position = Position::new(path, inode, 0);
         self.positions.add_position(&position);
         if let Err(err) = self.positions.write() {
             error!("Write failed: {}", err);
@@ -161,7 +166,7 @@ impl EventHandler {
     /// # Arguments
     ///
     /// * `event` - file access event.
-    fn handle_file_access(&self, event: &notify::Event) -> Result<(), &'static str> {
+    fn handle_file_access(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         // only handling file write event.
         match event.kind {
             notify::EventKind::Access(notify::event::AccessKind::Close(
@@ -185,15 +190,34 @@ impl EventHandler {
     ///
     /// - write event did not have a path.
     ///
-    fn handle_file_write(&self, event: &notify::Event) -> Result<(), &'static str> {
+    fn handle_file_write(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         if event.paths.is_empty() {
             return Err("file write event received without file info.");
         }
-        let path = event.paths[0].as_os_str();
-        debug!("handling file write for {:?}", path);
-        // TODO: read logs from file
-        // send logs to API
-        publish_logs(&self.settings.server, Logs::new()?);
-        Ok(())
+        if let Some((inode, _)) = self.get_inode_for_os_str(&event.paths[0]) {
+            self.positions
+                .find(|&pos| pos.file_id == inode)
+                .map(|pos| read_lines_starting_from_byte(&pos.file_path, pos.bytes_read, 1000000))
+                .map(|x| {
+                    x.map(|y| {
+                        self.positions.update_bytes_read(inode, y.new_pos);
+                        publish_logs(&self.settings.server, Logs::new(y.lines));
+                        self.positions.write()
+                    })
+                });
+            return Ok(());
+        }
+        Err("could not get inode for file")
+    }
+
+    fn get_inode_for_os_str(&self, path: &PathBuf) -> Option<(u64, String)> {
+        let path = match path.to_str() {
+            Some(path) => path,
+            None => return None,
+        };
+        match get_file_inode(path) {
+            Ok(inode) => Some((inode, path.to_string())),
+            Err(_) => None,
+        }
     }
 }
