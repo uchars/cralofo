@@ -14,20 +14,6 @@ chrono = "0.4"
 regex = "1.7"
 reqwest = { version = "0.12.5", features = ["json"] }
 openssl = "0.10.66"
+openssl-sys = { version = "0.9", features = ["vendored"] }
 tokio = { version = "1", features = ["full"] }
 
-[dependencies.openssl-sys]
-version = "0.9"
-features = ["vendored"]
-
-[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
-pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get --assume-yes install libssl-dev:$CROSS_DEB_ARCH"
-]
-
-[workspace.metadata.cross.target.x86_64-unknown-linux-gnu]
-pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get install --assume-yes libssl-dev:$CROSS_DEB_ARCH"
-]
