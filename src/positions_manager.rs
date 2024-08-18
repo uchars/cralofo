@@ -59,7 +59,9 @@ impl PositionsFile {
             .iter()
             .any(|other| other.file_id == position.file_id)
         {
-            self.position.push(position.clone());
+            let mut pos = position.clone();
+            pos.file_path = pos.file_path.replace("\\", "/");
+            self.position.push(pos.clone());
             self.update();
         } else {
             info!(
@@ -109,7 +111,7 @@ impl PositionsFile {
                     self.position[idx].file_path,
                     new_path
                 );
-                self.position[idx].file_path = new_path.to_string();
+                self.position[idx].file_path = new_path.replace("\\", "/").to_string();
                 self.update();
             });
     }
@@ -178,6 +180,10 @@ impl PositionsFile {
     fn cleanup(&mut self) {
         self.position
             .retain(|p| Path::exists(Path::new(&p.file_path)));
+        let positions = self.position.clone(); // Clone the positions for iteration
+        for p in &positions {
+            self.rename_position(p.file_id, &p.file_path.replace("\\", "/"));
+        }
     }
 
     /// Check if inode still matches filename, if not update.

@@ -5,21 +5,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(windows)]
-use winapi::shared::ntdef::NULL;
-#[cfg(windows)]
-use winapi::um::fileapi::{GetFileInformationByHandle, FILE_ATTRIBUTE_NORMAL};
-#[cfg(windows)]
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-#[cfg(windows)]
-use winapi::um::minwinbase::LPSECURITY_ATTRIBUTES;
-#[cfg(windows)]
-use winapi::um::winbase::CreateFileW;
-#[cfg(windows)]
-use winapi::um::winnt::HANDLE;
-#[cfg(windows)]
-use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, OPEN_EXISTING};
-
 use chrono::Utc;
 use log::LevelFilter;
 
@@ -65,40 +50,25 @@ fn get_inode(path: &Path) -> std::io::Result<u64> {
 
 #[cfg(windows)]
 fn get_inode(path: &Path) -> std::io::Result<u64> {
-    use std::ffi::OsStr;
-    use std::os::windows::prelude::*;
-    use std::ptr;
-
-    let path = path
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<u16>>();
-
-    let handle: HANDLE = unsafe {
-        CreateFileW(
-            path.as_ptr(),
-            GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            ptr::null_mut(),
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            ptr::null_mut(),
-        )
+    use std::{fs::OpenOptions, os::windows::fs::OpenOptionsExt};
+    use std::{mem, os::windows::prelude::*};
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+    use windows_sys::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION},
     };
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)?;
 
-    if handle == INVALID_HANDLE_VALUE {
-        return Err(std::io::Error::last_os_error());
+    unsafe {
+        let mut info: BY_HANDLE_FILE_INFORMATION = mem::zeroed();
+        let ret = GetFileInformationByHandle(file.as_raw_handle() as HANDLE, &mut info);
+        if ret == 0 {
+            return Err(std::io::Error::last_os_error());
+        };
+
+        Ok(((info.nFileIndexHigh as u64) << 32) | (info.nFileIndexLow as u64))
     }
-
-    let mut file_info = unsafe { std::mem::zeroed() };
-    let result = unsafe { GetFileInformationByHandle(handle, &mut file_info) };
-
-    unsafe { winapi::um::handleapi::CloseHandle(handle) };
-
-    if result == 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-
-    Ok((file_info.nFileIndexHigh as u64) << 32 | file_info.nFileIndexLow as u64)
 }

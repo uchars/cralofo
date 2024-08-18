@@ -63,13 +63,14 @@ impl EventHandler {
         trace!("Change: {event:?}");
         match event.kind {
             notify::EventKind::Access(_) => self.handle_file_access(&event).await?,
-            notify::EventKind::Create(notify::event::CreateKind::File) => {
-                self.handle_create_file(&event)?
-            }
+            notify::EventKind::Create(_) => self.handle_create_file(&event)?,
             notify::EventKind::Modify(notify::event::ModifyKind::Name(
-                notify::event::RenameMode::Both,
+                notify::event::RenameMode::To,
             )) => self.handle_rename_file(&event)?,
             notify::EventKind::Remove(_) => self.handle_remove_file(&event)?,
+            notify::EventKind::Modify(notify::event::ModifyKind::Any) => {
+                self.handle_file_access(&event).await?
+            }
             _ => {}
         };
         Ok(())
@@ -89,7 +90,6 @@ impl EventHandler {
         let inode = get_file_inode(&event.paths[0]).ok_or("could not get inode file")?;
         // TODO: i need to detect if this was a swap, if so i need to update
         // the byte position of this one
-        log::info!("poggers");
         let position = Position::new(path_str, inode, 0);
         self.positions.add_position(&position);
         if let Err(err) = self.positions.write() {
@@ -110,13 +110,13 @@ impl EventHandler {
     ///
     /// This function will return an error if .
     fn handle_rename_file(&mut self, event: &notify::Event) -> Result<(), &'static str> {
-        if event.paths.len() < 2 {
+        if event.paths.is_empty() {
             return Err("rename event contained less than 2 elements for some reason.");
         }
-        let to_str = event.paths[1]
+        let to_str = event.paths[0]
             .to_str()
             .ok_or("could not convert path to str")?; // get inode for old and new file
-        let inode = get_file_inode(&event.paths[1]).ok_or("could not get inode file")?;
+        let inode = get_file_inode(&event.paths[0]).ok_or("could not get inode file")?;
         self.positions.rename_position(inode, to_str);
         if let Err(e) = self.positions.write() {
             error!("failed to write: {}", e);
@@ -137,7 +137,7 @@ impl EventHandler {
             return Err("create file event did not contain file.");
         }
         let path = match event.paths[0].as_os_str().to_str() {
-            Some(path) => path,
+            Some(path) => path.replace("\\", "/"),
             None => return Err("could not convert path to string"),
         };
         // need to remove based on file name, since file no longer exists.
@@ -159,12 +159,21 @@ impl EventHandler {
     /// * `event` - file access event.
     async fn handle_file_access(&mut self, event: &notify::Event) -> Result<(), &'static str> {
         // only handling file write event.
-        if event.kind
-            == notify::EventKind::Access(notify::event::AccessKind::Close(
-                notify::event::AccessMode::Write,
-            ))
+        #[cfg(unix)]
         {
-            return self.handle_file_write(event).await;
+            if event.kind
+                == notify::EventKind::Access(notify::event::AccessKind::Close(
+                    notify::event::AccessMode::Write,
+                ))
+            {
+                return self.handle_file_write(event).await;
+            }
+        }
+        #[cfg(windows)]
+        {
+            if event.kind == notify::EventKind::Modify(notify::event::ModifyKind::Any) {
+                return self.handle_file_write(event).await;
+            }
         }
         Ok(())
     }
@@ -191,7 +200,7 @@ impl EventHandler {
             let file_read = foo
                 .map(|pos| read_lines_starting_from_byte(&pos.file_path, pos.bytes_read, 1000000))
                 .ok_or("could not read lines")?
-                .ok_or("foo")?;
+                .ok_or("could not read lines")?;
 
             if let Err(e) =
                 publish_logs(&self.settings.server, Logs::from_lines(file_read.lines)).await
