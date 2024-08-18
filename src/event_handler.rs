@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use log::{debug, error, trace};
 use notify::{RecommendedWatcher, Watcher};
@@ -83,18 +83,14 @@ impl EventHandler {
         if event.paths.is_empty() {
             return Err("create file event did not contain file.");
         }
-        let path = match event.paths[0].as_os_str().to_str() {
-            Some(path) => path,
-            None => return Err("could not convert path to string"),
-        };
-        let inode = match get_file_inode(path) {
-            Ok(inode) => inode,
-            Err(_) => return Err("could not get inode file"),
-        };
+        let path_str = event.paths[0]
+            .to_str()
+            .ok_or("could not convert path to string")?;
+        let inode = get_file_inode(&event.paths[0]).ok_or("could not get inode file")?;
         // TODO: i need to detect if this was a swap, if so i need to update
         // the byte position of this one
         log::info!("poggers");
-        let position = Position::new(path, inode, 0);
+        let position = Position::new(path_str, inode, 0);
         self.positions.add_position(&position);
         if let Err(err) = self.positions.write() {
             error!("Write failed: {}", err);
@@ -117,16 +113,11 @@ impl EventHandler {
         if event.paths.len() < 2 {
             return Err("rename event contained less than 2 elements for some reason.");
         }
-        let to = match event.paths[1].as_os_str().to_str() {
-            Some(path) => path,
-            None => return Err("could not convert path to string"),
-        };
-        // get inode for old and new file
-        let inode = match get_file_inode(to) {
-            Ok(inode) => inode,
-            Err(_) => return Err("could not get inode file"),
-        };
-        self.positions.rename_position(inode, to);
+        let to_str = event.paths[1]
+            .to_str()
+            .ok_or("could not convert path to str")?; // get inode for old and new file
+        let inode = get_file_inode(&event.paths[1]).ok_or("could not get inode file")?;
+        self.positions.rename_position(inode, to_str);
         if let Err(e) = self.positions.write() {
             error!("failed to write: {}", e);
         }
@@ -195,7 +186,7 @@ impl EventHandler {
         if event.paths.is_empty() {
             return Err("file write event received without file info.");
         }
-        if let Some((inode, _)) = self.get_inode_for_os_str(&event.paths[0]) {
+        if let Some(inode) = get_file_inode(&event.paths[0]) {
             let foo = self.positions.find(|&pos| pos.file_id == inode);
             let file_read = foo
                 .map(|pos| read_lines_starting_from_byte(&pos.file_path, pos.bytes_read, 1000000))
@@ -213,16 +204,5 @@ impl EventHandler {
             return Ok(());
         }
         Err("could not get inode for file")
-    }
-
-    fn get_inode_for_os_str(&self, path: &PathBuf) -> Option<(u64, String)> {
-        let path = match path.to_str() {
-            Some(path) => path,
-            None => return None,
-        };
-        match get_file_inode(path) {
-            Ok(inode) => Some((inode, path.to_string())),
-            Err(_) => None,
-        }
     }
 }

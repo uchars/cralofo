@@ -1,7 +1,6 @@
 use std::{
     fs::{self, File},
     io::Write,
-    os::unix::fs::MetadataExt,
     path::Path,
 };
 
@@ -9,7 +8,7 @@ use log::{debug, info, trace};
 
 use crate::{
     models::positions::{Position, PositionsFile},
-    utils::get_datetime_str,
+    utils::{get_datetime_str, get_file_inode},
 };
 
 impl PositionsFile {
@@ -189,7 +188,7 @@ impl PositionsFile {
                 .filter_map(|e| e.ok())
                 .filter_map(|e| {
                     let path = e.path();
-                    let inode = e.metadata().ok()?.ino();
+                    let inode = get_file_inode(&path)?;
                     path.to_str().map(|s| (s.to_string(), inode))
                 })
                 .collect::<Vec<(String, u64)>>()
