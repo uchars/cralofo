@@ -13,23 +13,32 @@ jobs:
     strategy:
       matrix:
         include:
-          - build: Linux x64
+          - build: Linux x64 Musl
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-          - build: Linux x86
+          - build: Linux x64 GNU
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - build: Linux i686 GNU
             os: ubuntu-latest
             target: i686-unknown-linux-gnu
-          - build: Linux ARM64
+          - build: Linux i586 Musl
+            os: ubuntu-latest
+            target: i586-unknown-linux-musl
+          - build: Linux ARM64 Musl
             os: ubuntu-latest
             target: aarch64-unknown-linux-musl
+          - build: Linux ARM64 GNU
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
           - build: Linux ARM
             os: ubuntu-latest
             target: arm-unknown-linux-musleabi
           - build: Windows x64
-            os: ubuntu-latest
+            os: windows-latest
             target: x86_64-pc-windows-gnu
           - build: Windows x86
-            os: ubuntu-latest
+            os: windows-latest
             target: i686-pc-windows-gnu
 
     steps:
