@@ -1,6 +1,7 @@
 [package]
 name = "cralofo"
 version = "0.1.0"
+authors = ["Nils Sterz"]
 edition = "2021"
 
 [dependencies]
