@@ -8,37 +8,46 @@ permissions:
 jobs:
   build-and-upload:
     name: Build and upload
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.container }}
 
     strategy:
       matrix:
         include:
           - build: Linux x64 Musl
             os: ubuntu-latest
+            container: ubuntu-latest
             target: x86_64-unknown-linux-musl
           - build: Linux x64 GNU
             os: ubuntu-latest
+            container: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - build: Linux i686 GNU
             os: ubuntu-latest
+            container: ubuntu-latest
             target: i686-unknown-linux-gnu
           - build: Linux i586 Musl
             os: ubuntu-latest
+            container: ubuntu-latest
             target: i586-unknown-linux-musl
           - build: Linux ARM64 Musl
             os: ubuntu-latest
+            container: ubuntu-latest
             target: aarch64-unknown-linux-musl
           - build: Linux ARM64 GNU
             os: ubuntu-latest
+            container: ubuntu-latest
             target: aarch64-unknown-linux-gnu
           - build: Linux ARM
             os: ubuntu-latest
+            container: ubuntu-latest
             target: arm-unknown-linux-musleabi
           - build: Windows x64
             os: windows-latest
+            container: ubuntu-latest
             target: x86_64-pc-windows-gnu
           - build: Windows x86
             os: windows-latest
+            container: ubuntu-latest
             target: i686-pc-windows-gnu
 
     steps:
