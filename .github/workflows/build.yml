@@ -74,9 +74,6 @@ jobs:
         shell: bash
         run: |
           binary_name="cralofo" 
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then 
-            binary_name="cralofo.exe" 
-          fi
 
           dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
           mkdir -p "$dirname"
