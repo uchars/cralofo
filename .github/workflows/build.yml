@@ -1,0 +1,99 @@
+name: Deploy
+
+on: [push, pull_request]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build and upload
+    runs-on: ${{ matrix.container }}
+
+    strategy:
+      matrix:
+        include:
+          - build: Linux x64 Musl
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - build: Linux x64 GNU
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - build: Linux i686 GNU
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: i686-unknown-linux-gnu
+          - build: Linux i586 Musl
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: i586-unknown-linux-musl
+          - build: Linux ARM64 Musl
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+          - build: Linux ARM64 GNU
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - build: Linux ARM
+            os: ubuntu-latest
+            container: ubuntu-latest
+            target: arm-unknown-linux-musleabi
+          - build: Windows x64
+            os: windows-latest
+            container: ubuntu-latest
+            target: x86_64-pc-windows-gnu
+          - build: Windows x86
+            os: windows-latest
+            container: ubuntu-latest
+            target: i686-pc-windows-gnu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get the release version from the tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --verbose --release --target ${{ matrix.target }}
+
+      - name: Build archive
+        shell: bash
+        run: |
+          binary_name="cralofo" 
+
+          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+          mkdir -p "$dirname"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+          else
+            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          fi
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a "$dirname.zip" "$dirname"
+            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
+          else
+            tar -czf "$dirname.tar.gz" "$dirname"
+            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ env.ASSET }}
